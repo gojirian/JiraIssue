@@ -13,19 +13,42 @@ function Get-JiraIssue {
     )
     
     $url = "$baseUrl/rest/api/3/issue/$issueKey"
-
+    clear-host
     Write-Host "Getting issue $issueKey from Jira... @ $url"
 
     $response = Invoke-RestMethod -Uri $url -Method Get -Headers @{Authorization = $authHeader}
-    
-    $issue = $response.fields.summary
 
-    Write-Host "Issue: $issue"
-    Write-Host "Description: $($response.fields.description)"
-    Write-Host "Status: $($response.fields.status.name)"
-    Write-Host "Assignee: $($response.fields.assignee.displayName)"
-    Write-Host "Remaining Estimate: $($response.fields.timetracking.remainingEstimate)"
-    Write-Host "Time Spent: $($response.fields.timetracking.timeSpent)"
+    # $projectUrl = "$baseUrl/rest/api/3/project/$($response.fields.project.id)"
+
+    # $projectResponse = Invoke-RestMethod -Uri $projectUrl -Method Get -Headers @{Authorization = $authHeader}
+
+    # get rules/automations 
+    # $rulesUrl = "$baseUrl/rest/api/3/project/$($response.fields.project.key)/automation"
+    # Write-Host "Getting rules from Jira... @ $rulesUrl"
+    # $rulesResponse = Invoke-RestMethod -Uri $rulesUrl -Method Get -Headers @{Authorization = $authHeader}
+
+    $issue = $response.fields.summary
+    clear-host
+    Write-Host "Issue Details:" -ForegroundColor Cyan -BackgroundColor Black
+    Write-Host "    Issue: $issue" -ForegroundColor Yellow -BackgroundColor Black
+    $priority = $response.fields.priority.name
+    $priorityColor = switch ($priority) {
+        "Lowest" { "LightBlue" }
+        "Low" { "Cyan" }
+        "Medium" { "Yellow" }
+        "High" { "DarkYellow" }
+        "Highest" { "Red" }
+        "Critical" { "DarkRed" }
+        default { "White" }
+    }
+    Write-Host "    Priority: $priority" -ForegroundColor $priorityColor -BackgroundColor Black
+    "    Project Key: $($response.fields.project.key)"
+    "    Description: $($response.fields.description)"
+    "    Status: $($response.fields.status.name)"
+    "    Assignee: $($response.fields.assignee.displayName)"
+    "    Created: $($response.fields.created)"
+    $link = $baseUrl + "/browse/$issueKey"
+    "    🔗 Link: $link"
 }
 
 function Get-EpicIssues {
@@ -42,25 +65,61 @@ function Get-EpicIssues {
     }
 
     $url = "$baseUrl/rest/api/3/search?jql=parentEpic = $epicKey and status not in (Done, Cancelled) $search ORDER BY priority DESC, status DESC &maxResults=100"
-
+    Clear-Host
     Write-Host "Getting issues from epic $epicKey from Jira... @ $url"
 
     $response = Invoke-RestMethod -Uri $url -Method Get -Headers @{Authorization = $authHeader}
 
     $issues = $response.issues
 
+    PrintTable($issues)
+}
+
+function PrintTable($issues) {
+    Clear-Host
     $table = @()
     foreach ($issue in $issues) {
+        $priority = $issue.fields.priority.name
+        # Assign colors based on priority
+        $priorityColor = switch ($priority) {
+            # Light Blue
+            "Lowest"  { "38" }
+            # Cyan
+            "Low"      { "36" }
+            # Green
+            "Medium"    { "35" }  
+            # Yellow
+            "High"     { "33" }
+            # Magenta
+            "Highest" { "31" }
+            # Bright Red
+            "Critical" { "91" }
+            # Default (No color)
+            default     { "0" }   
+        }
         $table += [PSCustomObject]@{
             Key       = $issue.key
             Issue     = $issue.fields.summary.Substring(0, [Math]::Min(75, $issue.fields.summary.Length))
-            Priority  = $issue.fields.priority.name
+            Priority  = $priority
+            PriorityColor = $priorityColor
             Status    = $issue.fields.status.name
-            Link      = $issue.self
         }
     }
-
-    $table | Format-Table -AutoSize
+    
+    $table | ForEach-Object {
+        $priorityColor = $_.PriorityColor
+        $priority = $_.Priority
+        $coloredPriority = "`e[38;5;$priorityColor`m$priority`e[0m"
+        
+        [PSCustomObject]@{
+            Key       = $_.Key
+            Issue     = $_.Issue
+            Color     = $priorityColor
+            Priority  = $coloredPriority
+            Status    = $_.Status
+            Link      = $_.Link
+        }
+    } | Format-Table -Property Key, Issue, Color, Priority, Status, Link -AutoSize
 }
 
 function Get-ProjectIssues {
@@ -82,26 +141,15 @@ function Get-ProjectIssues {
     }
 
     $url = "$baseUrl/rest/api/3/search?jql=project = $projectKey and status not in (Done, Cancelled) $search ORDER BY priority DESC, status DESC &maxResults=100"
-
+    Clear-Host
     Write-Host "Getting issues from project $projectKey from Jira... @ $url"
 
     $response = Invoke-RestMethod -Uri $url -Method Get -Headers @{Authorization = $authHeader}
 
     $issues = $response.issues
 
-    $table = @()
-    foreach ($issue in $issues) {
-        $table += [PSCustomObject]@{
-            Key       = $issue.key
-            Issue     = $issue.fields.summary.Substring(0, [Math]::Min(75, $issue.fields.summary.Length))
-            Assignee  = $issue.fields.assignee.displayName
-            Priority  = $issue.fields.priority.name
-            Status    = $issue.fields.status.name
-            Link      = $issue.self
-        }
-    }
-
-    $table | Format-Table -AutoSize
+    # clear the terminal/console
+    PrintTable($issues)
 }
 
 <#
