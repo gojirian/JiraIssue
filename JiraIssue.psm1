@@ -49,6 +49,25 @@ function Get-JiraIssue {
     "    Created: $($response.fields.created)"
     $link = $baseUrl + "/browse/$issueKey"
     "    🔗 Link: $link"
+
+    # dump it all so i can see linked issues
+    # $response.fields | Format-List
+
+    # issues linked to this issue
+    $linkedIssues = $response.fields.issuelinks
+    if ($linkedIssues) {
+        Write-Host "Linked Issues:" -ForegroundColor Cyan -BackgroundColor Black
+        foreach ($linkedIssue in $linkedIssues) {
+            $outwardIssue = $linkedIssue.outwardIssue
+            $inwardIssue = $linkedIssue.inwardIssue
+            if ($outwardIssue) {
+                Write-Host "    Outward Issue: $($outwardIssue.key) - $($outwardIssue.fields.summary)" -ForegroundColor Yellow -BackgroundColor Black
+            }
+            if ($inwardIssue) {
+                Write-Host "    Inward Issue: $($inwardIssue.key) - $($inwardIssue.fields.summary)" -ForegroundColor Yellow -BackgroundColor Black
+            }
+        }
+    }
 }
 
 function Get-EpicIssues {
@@ -81,6 +100,7 @@ function PrintTable($issues) {
     foreach ($issue in $issues) {
         $priority = $issue.fields.priority.name
         # Assign colors based on priority
+        $linkedIssues = $issue.fields.issuelinks
         $priorityColor = switch ($priority) {
             # Light Blue
             "Lowest"  { "38" }
@@ -99,10 +119,11 @@ function PrintTable($issues) {
         }
         $table += [PSCustomObject]@{
             Key       = $issue.key
-            Issue     = $issue.fields.summary.Substring(0, [Math]::Min(75, $issue.fields.summary.Length))
+            Issue     = $issue.fields.summary.Substring(0, [Math]::Min(85, $issue.fields.summary.Length))
             Priority  = $priority
             PriorityColor = $priorityColor
             Status    = $issue.fields.status.name
+            LinkedIssues = $linkedIssues
         }
     }
     
@@ -110,6 +131,23 @@ function PrintTable($issues) {
         $priorityColor = $_.PriorityColor
         $priority = $_.Priority
         $coloredPriority = "`e[38;5;$priorityColor`m$priority`e[0m"
+        $linkedIssueKeys = if ($_.LinkedIssues) {
+            ($_.LinkedIssues | ForEach-Object {
+                if ($_.inwardIssue) {
+                    # should be green
+                    # $_.inwardIssue.key
+                    "`e[38;5;32m$($_.inwardIssue.key)`e[0m"
+
+                } elseif ($_.outwardIssue) {
+                    # $_.outwardIssue.key
+                    # should be blue 
+                    "`e[38;5;34m$($_.outwardIssue.key)`e[0m"
+                }
+            } | Where-Object { $_ }) -join ", "
+        } else {
+            ""
+        }
+        # colorize links 
         
         [PSCustomObject]@{
             Key       = $_.Key
@@ -117,9 +155,18 @@ function PrintTable($issues) {
             Color     = $priorityColor
             Priority  = $coloredPriority
             Status    = $_.Status
-            Link      = $_.Link
+            LinkedIssues = $linkedIssueKeys
         }
-    } | Format-Table -Property Key, Issue, Color, Priority, Status, Link -AutoSize
+    
+        [PSCustomObject]@{
+            Key       = $_.Key
+            Issue     = $_.Issue
+            Color     = $_.Color
+            Priority  = $_.Priority
+            Status    = $_.Status
+            LinkedIssues = $linkedIssueKeys
+        }
+    } | Format-Table -Property Key, Issue, Color, Priority, Status, LinkedIssues -AutoSize
 }
 
 function Get-ProjectIssues {
