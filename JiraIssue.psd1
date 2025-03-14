@@ -7,6 +7,8 @@
     'Get-JiraIssue',
     'Get-EpicIssues',
     'Get-ProjectIssues',
-    'Get-Projects'
+    'Get-Projects',
+    'Get-MyIssues',
+    'Get-ServiceDesk'
     )
 }
