@@ -248,7 +248,9 @@ function Get-ProjectIssues {
         [string]$projectKey,
         # optional search parameter
         [string]$search = "",
-        [switch]$MeMode
+        [switch]$MeMode,
+        [string]$date = "",
+        [switch]$monthAll = $false
     )
 
     if ($search -ne "") {
@@ -257,11 +259,22 @@ function Get-ProjectIssues {
         $search = ""
     }
 
+    # make $projectKey uppercase
+    $projectKey = $projectKey.ToUpper()
+
     if ($MeMode) {
         $search += " AND assignee = currentUser()"
     }
 
-    $url = "$baseUrl/rest/api/3/search?jql=project = $projectKey and status not in (Done, Cancelled) $search ORDER BY priority DESC, status DESC &maxResults=100"
+    if ($monthAll) {
+        $dateFilter = " AND updated >= startOfMonth(-1) and status not in (Cancelled) "
+    } elseif ($date) {
+        $dateFilter = " AND updated >= '$date' and status not in (Done, Cancelled) "
+    } else {
+        $dateFilter = " and status not in (Done, Cancelled) "
+    }
+
+    $url = "$baseUrl/rest/api/3/search?jql=project=$projectKey $dateFilter $search ORDER BY priority DESC, status DESC &maxResults=100"
     Clear-Host
     Write-Host "Getting issues from project $projectKey from Jira... @ $url"
 
@@ -345,9 +358,6 @@ function Get-ServiceDesk {
         $search = " AND text ~ '$search'"
     }
 
-    # whaere status not cancelled 
-    $search += " AND status not in (Cancelled)"
-
     if ($MyRequests) {
         $search += " AND assignee = currentUser()"
     }
@@ -360,11 +370,11 @@ function Get-ServiceDesk {
 
     $response = Invoke-RestMethod -Uri $url -Method Get -Headers @{Authorization = $authHeader}
 
-    # i just want to see all the json return from this reuqest 
+    # i just want to see all the json return from this request 
     # $response | ConvertTo-Json -Depth 10 | Out-Host
 
     # dump the json 
-    # $response | Format-List
+    $response | Format-List
 
     $issues = $response.issues
     PrintTableWithHours($issues)
